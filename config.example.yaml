@@ -1,0 +1,6 @@
+---
+server: your-ldap-server.company.tld
+tls: yes
+port: 636
+base-dn: "ou=Fun User Accounts,dc=company,dc=tld"
+filter-template: "(|(customUsername=$1))"
