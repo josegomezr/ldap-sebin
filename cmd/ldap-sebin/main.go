@@ -35,6 +35,10 @@ func main() {
 	}
 	fmt.Printf("--- cfg:\n%+v\n\n", cfg)
 
+	if cfg.Upstream == "" || cfg.BaseDn == "" {
+		log.Fatalf("Incomplete upstream configuration.")
+	}
+
 	handler := &handler.Handler{
 		Sessions:       make(map[string]handler.Session),
 		LdapUrl:        cfg.Upstream,
