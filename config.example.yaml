@@ -1,6 +1,12 @@
 ---
-server: your-ldap-server.company.tld
-tls: yes
-port: 636
+# LDAP URI to forward requests to
+upstream-server-url: ldaps://your-ldap-server.example.com
+# address or name to bind on (optional, defaults to localhost)
+listen-address: ipv6-localhost
+# port to bind on (optional, defaults to 389 if certificate/key are not set, else 636)
+listen-port: 3389
+# certificate and private key to enable TLS listener (optional, defaults to plain text listener)
+certificate: /etc/ssl/ldap.crt
+key: /etc/ssl/ldap.key
 base-dn: "ou=Fun User Accounts,dc=company,dc=tld"
 filter-template: "(|(customUsername=$1))"
