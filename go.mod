@@ -1,6 +1,6 @@
 module github.com/josegomezr/ldap-sebin
 
-go 1.24.5
+go 1.23.0
 
 require (
 	github.com/go-ldap/ldap/v3 v3.4.11
