@@ -16,6 +16,8 @@ import (
 type Handler struct {
 	ldapserver.BaseHandler
 
+	Verbose        bool
+	AllowedBindDn  string
 	Sessions       map[string]Session
 	LdapUrl        string
 	BaseDn         string
@@ -29,7 +31,9 @@ type Session struct {
 }
 
 func (h Handler) dial() (*ldap.Conn, error) {
-	fmt.Printf("Starting connection to %s\n", h.LdapUrl)
+	if h.Verbose {
+		fmt.Printf("Starting connection to %s\n", h.LdapUrl)
+	}
 	return ldap.DialURL(h.LdapUrl)
 }
 
@@ -43,7 +47,9 @@ func (h Handler) getSession(conn *ldapserver.Conn) (Session, error) {
 	if !ok { // open a new server connection if not
 		l, err := h.dial()
 		if err != nil {
-			fmt.Printf("ERR: %s\n", err.Error())
+			if h.Verbose {
+				fmt.Printf("ERR: %s\n", err.Error())
+			}
 			return Session{}, err
 		}
 		// l.Debug = true
@@ -55,72 +61,94 @@ func (h Handler) getSession(conn *ldapserver.Conn) (Session, error) {
 	return s, nil
 }
 
+func getFirstDNComponent(bindDN string) string {
+	searchFilter, _, _ := strings.Cut(bindDN, ",")
+	_, searchFilter, _ = strings.Cut(searchFilter, "=")
+	return searchFilter	
+}
+
 func (h Handler) Bind(conn *ldapserver.Conn, msg *ldapserver.Message, req *ldapserver.BindRequest) {
-	bindDN := req.Name
-	if bindDN == "" {
-		log.Printf("Invalid bind with empty DN")
+	result := ldapserver.ResultOperationsError.AsResult("Unknown Error")
+	defer func(){
+		if h.Verbose {
+			fmt.Printf("Bind result: %+v\n", result)
+		}
+		conn.SendResult(msg.MessageID, nil, ldapserver.TypeBindResponseOp, result)
+	}()
 
-		conn.SendResult(msg.MessageID, nil, ldapserver.TypeBindResponseOp, ldapserver.ResultInvalidCredentials.AsResult("Bind with empty DN is not allowed."))
-
+	if !strings.HasSuffix(req.Name, h.AllowedBindDn) {
+		result = ldapserver.ResultInsufficientAccessRights.AsResult("hey! that's trespassing")
 		return
 	}
 
-	bindSimplePw := req.Credentials.(string)
+	if req.Name == "" {
+		if h.Verbose {
+			log.Printf("Invalid bind with empty DN")
+		}
 
-	searchFilter := bindDN
-	searchFilter, _, _ = strings.Cut(searchFilter, ",")
-	_, searchFilter, _ = strings.Cut(searchFilter, "=")
+		result = ldapserver.ResultInvalidCredentials.AsResult("Bind with empty DN is not allowed.")
+		return
+	}
 
-	searchFilter = strings.ReplaceAll(h.FilterTemplate, "$1", searchFilter)
-	log.Printf("input bind-dn: %+v\n", bindDN)
-	log.Printf("search-filter: %+v\n", searchFilter)
+	searchFilter := strings.ReplaceAll(h.FilterTemplate, "$1", getFirstDNComponent(req.Name))
+
+	if h.Verbose {
+		log.Printf("input bind-dn: %+v\n", req.Name)
+		log.Printf("search-filter: %+v\n", searchFilter)
+	}
 
 	search := ldap.NewSearchRequest(
 		h.BaseDn,
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 5, 0, false,
 		searchFilter,
 		[]string{"dn"},
-		nil)
+		nil,
+	)
 
 	s, err := h.getSession(conn)
 	if err != nil {
-		conn.SendResult(msg.MessageID, nil, ldapserver.TypeBindResponseOp, ldapserver.ResultOperationsError.AsResult(""))
-
+		result = ldapserver.ResultOperationsError.AsResult("Upstream connection error")
 		return
 	}
-	log.Printf("Performing search: %+v ", search)
+	if h.Verbose {
+		log.Printf("Performing search: %+v ", search)
+	}
 
 	sr, err := s.ldap.Search(search)
 	if err != nil {
-		conn.SendResult(msg.MessageID, nil, ldapserver.TypeBindResponseOp, ldapserver.ResultOperationsError.AsResult(""))
-
+		result = ldapserver.ResultOperationsError.AsResult(fmt.Sprintf("error: %s", err))
 		return
 	}
 
 	if len(sr.Entries) == 0 {
-		conn.SendResult(msg.MessageID, nil, ldapserver.TypeBindResponseOp, ldapserver.ResultNoSuchObject.AsResult(""))
-
+		result = ldapserver.ResultNoSuchObject.AsResult("Not found")
 		return
 	}
 
+	bindSimplePw := req.Credentials.(string)
 	for _, entry := range sr.Entries {
 		newDn := entry.DN
-		log.Printf("Search matched DN: %+v ", newDn)
-
+		if h.Verbose {
+			log.Printf("Search matched DN: %+v ", newDn)
+		}
 		if err := s.ldap.Bind(newDn, bindSimplePw); err != nil {
-			log.Printf("Failed auth, continuing")
+			if h.Verbose {
+				log.Printf("Failed auth with %s, continuing\n", newDn)
+			}
 			continue
 		}
 
-		log.Printf("Auth succeeded!: %+v ", newDn)
-		conn.SendResult(msg.MessageID, nil, ldapserver.TypeBindResponseOp, ldapserver.ResultSuccess.AsResult(""))
-
+		if h.Verbose {
+			log.Printf("Auth succeeded with: %+v ", newDn)
+		}
+		result = ldapserver.ResultSuccess.AsResult("Success")
 		return
 	}
 
-	log.Printf("Failed auth against all matched entries")
-	conn.SendResult(msg.MessageID, nil, ldapserver.TypeBindResponseOp, ldapserver.ResultInvalidCredentials.AsResult(""))
-
+	if h.Verbose {
+		log.Printf("Failed auth against all matched entries")
+	}
+	result = ldapserver.ResultInvalidCredentials.AsResult("Could not bind with the given password")
 	return
 }
 
