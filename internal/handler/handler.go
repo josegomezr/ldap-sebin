@@ -64,12 +64,12 @@ func (h Handler) getSession(conn *ldapserver.Conn) (Session, error) {
 func getFirstDNComponent(bindDN string) string {
 	searchFilter, _, _ := strings.Cut(bindDN, ",")
 	_, searchFilter, _ = strings.Cut(searchFilter, "=")
-	return searchFilter	
+	return searchFilter
 }
 
 func (h Handler) Bind(conn *ldapserver.Conn, msg *ldapserver.Message, req *ldapserver.BindRequest) {
 	result := ldapserver.ResultOperationsError.AsResult("Unknown Error")
-	defer func(){
+	defer func() {
 		if h.Verbose {
 			fmt.Printf("Bind result: %+v\n", result)
 		}
@@ -150,6 +150,11 @@ func (h Handler) Bind(conn *ldapserver.Conn, msg *ldapserver.Message, req *ldaps
 	}
 	result = ldapserver.ResultInvalidCredentials.AsResult("Could not bind with the given password")
 	return
+}
+
+func (h Handler) Search(conn *ldapserver.Conn, msg *ldapserver.Message, req *ldapserver.SearchRequest) {
+	conn.SendResult(msg.MessageID, nil, ldapserver.TypeSearchResultDoneOp,
+		ldapserver.ResultSuccess.AsResult("This is a no-op, no search was actually done."))
 }
 
 func connID(conn *ldapserver.Conn) string {
