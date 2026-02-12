@@ -18,26 +18,30 @@ import (
 )
 
 type Cfg struct {
-	Verbose        bool   `yaml:"verbose"`
-	Upstream       string `yaml:"upstream-server-url"`
-	ListenAddr     string `yaml:"listen-address"`
-	ListenPort     string `yaml:"listen-port"`
-	Certificate    string `yaml:"certificate"`
-	Key            string `yaml:"key"`
-	BaseDn         string `yaml:"base-dn"`
-	FilterTemplate string `yaml:"filter-template"`
-	AllowedBindDn  string `yaml:"allowed-bind-dn"`
+	Verbose             bool   `yaml:"verbose"`
+	Upstream            string `yaml:"upstream-server-url"`
+	ListenAddr          string `yaml:"listen-address"`
+	ListenPort          string `yaml:"listen-port"`
+	Certificate         string `yaml:"certificate"`
+	Key                 string `yaml:"key"`
+	BaseDn              string `yaml:"base-dn"`
+	FilterTemplate      string `yaml:"filter-template"`
+	AllowedBindDn       string `yaml:"allowed-bind-dn"`
+	HealthCheckDN       string `yaml:"healtcheck-dn"`
+	HealthCheckPassword string `yaml:"healtcheck-password"`
 }
 
 func newHandler(cfg *Cfg) *handler.Handler {
 	return &handler.Handler{
-		AllowedBindDn:  cfg.AllowedBindDn,
-		Verbose:        cfg.Verbose,
-		Sessions:       make(map[string]handler.Session),
-		LdapUrl:        cfg.Upstream,
-		BaseDn:         cfg.BaseDn,
-		FilterTemplate: cfg.FilterTemplate,
-		Mutex:          &sync.Mutex{},
+		AllowedBindDn:       cfg.AllowedBindDn,
+		Verbose:             cfg.Verbose,
+		Sessions:            make(map[string]handler.Session),
+		LdapUrl:             cfg.Upstream,
+		BaseDn:              cfg.BaseDn,
+		FilterTemplate:      cfg.FilterTemplate,
+		HealthCheckDN:       cfg.HealthCheckDN,
+		HealthCheckPassword: cfg.HealthCheckPassword,
+		Mutex:               &sync.Mutex{},
 	}
 }
 func newServer(cfg *Cfg) *ldapserver.LDAPServer {
@@ -128,6 +132,20 @@ func enrichConfigFromEnv(cfg *Cfg) {
 				log.Printf("Ignoring invalid LDAP_SEBIN_VERBOSE value %q", val)
 			}
 		}
+	}
+	if val, found := os.LookupEnv("LDAP_SEBIN_HEALTHCHECK_DN"); found {
+		if val == "" {
+			val = "healt=check"
+			log.Printf("Falling back LDAP_SEBIN_HEALTHCHECK_DN to %q", val)
+		}
+		log.Printf("Health-check DN set to %q", val)
+		cfg.HealthCheckDN = val
+	}
+	if val, found := os.LookupEnv("LDAP_SEBIN_HEALTHCHECK_PASSWORD"); found {
+		if val == "" {
+			log.Printf("Ignoring empty LDAP_SEBIN_HEALTHCHECK_PASSWORD value.")
+		}
+		cfg.HealthCheckPassword = val
 	}
 }
 

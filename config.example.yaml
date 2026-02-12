@@ -10,3 +10,10 @@ certificate: /etc/ssl/ldap.crt
 key: /etc/ssl/ldap.key
 base-dn: "ou=Fun User Accounts,dc=company,dc=tld"
 filter-template: "(|(customUsername=$1))"
+allowed-bind-dn: "dc=suse,dc=de"
+
+# Health check, must be relative to allowed dn
+healtcheck-dn: "doctor=check,dc=suse,dc=de"
+healtcheck-password: "check"
+
+verbose: false

@@ -16,13 +16,15 @@ import (
 type Handler struct {
 	ldapserver.BaseHandler
 
-	Verbose        bool
-	AllowedBindDn  string
-	Sessions       map[string]Session
-	LdapUrl        string
-	BaseDn         string
-	FilterTemplate string
-	Mutex          *sync.Mutex
+	Verbose             bool
+	AllowedBindDn       string
+	Sessions            map[string]Session
+	LdapUrl             string
+	BaseDn              string
+	FilterTemplate      string
+	HealthCheckDN       string
+	HealthCheckPassword string
+	Mutex               *sync.Mutex
 }
 
 type Session struct {
@@ -81,12 +83,20 @@ func (h Handler) Bind(conn *ldapserver.Conn, msg *ldapserver.Message, req *ldaps
 		return
 	}
 
+	bindSimplePw := req.Credentials.(string)
+
 	if req.Name == "" {
 		if h.Verbose {
 			log.Printf("Invalid bind with empty DN")
 		}
 
 		result = ldapserver.ResultInvalidCredentials.AsResult("Bind with empty DN is not allowed.")
+		return
+	}
+
+	if req.Name == h.HealthCheckDN && h.HealthCheckPassword == bindSimplePw {
+		log.Printf("Healthcheck matched: %q\n", req.Name)
+		result = ldapserver.ResultSuccess.AsResult("Health-check")
 		return
 	}
 
@@ -125,7 +135,6 @@ func (h Handler) Bind(conn *ldapserver.Conn, msg *ldapserver.Message, req *ldaps
 		return
 	}
 
-	bindSimplePw := req.Credentials.(string)
 	for _, entry := range sr.Entries {
 		newDn := entry.DN
 		if h.Verbose {
